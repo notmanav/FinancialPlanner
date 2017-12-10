@@ -64,6 +64,7 @@ class Asset(Base):
     carry_over_value=0
     current_year=0
     asset_year_end_values=None
+    sort_order=0
     
         
     @orm.reconstructor
@@ -79,7 +80,7 @@ class Asset(Base):
             print("End date of Asset: %s" %self.getEndDate())
 
     def printMeMini(self, year, verbose=False):
-            current_year_value=self.getNetCurrentYearValue(year)
+            current_year_value=self.getTxTypeInt()*self.getTotalCurrentYearValue(year)
             if(verbose==True or current_year_value!=0):
                 print("%d || %s || %d || %s || %s" %(year, self.name,current_year_value, self.acquire_date, self.getEndDate()))
     
@@ -92,13 +93,16 @@ class Asset(Base):
     def isActive(self, year):
         return self.acquire_date.year<= year and self.getEndDate().year>year
 
-    def reduceValue(self, money, year):
-        if(self.getTotalCurrentYearValue(year)>=money):
-            self.setTotalCurrentYearValue(self.getTotalCurrentYearValue(year)-money, year)
+    #Reduce amount logic here
+    def reduceValue(self, expense, year):
+        if(self.getTotalCurrentYearValue(year)>=expense.getTotalCurrentYearValue(year)):
+            self.setTotalCurrentYearValue(self.getTotalCurrentYearValue(year)-expense.getTotalCurrentYearValue(year), year)
+            expense.setTotalCurrentYearValue(0,year)
             return 0
         else:
-            remaining_money= money-self.getTotalCurrentYearValue(year)
+            remaining_money= expense.getTotalCurrentYearValue()-self.getTotalCurrentYearValue(year)
             self.setTotalCurrentYearValue(0,year)
+            expense.setTotalCurrentYearValue(remaining_money,year)
             return remaining_money
     
     def yearsSince(self, year):
@@ -110,17 +114,14 @@ class Asset(Base):
     def getTotalCurrentYearValue(self, year=current_year):
         if(self.acquire_date.year>year):
             return 0
-        elif(self.asset_year_end_values.get(self.current_year)==None):
+        elif(self.asset_year_end_values.get(year)==None):
             if(self.isActive(year)):
                 assetValue=self.amount*(1+self.growth_rate/100)**self.yearsSince(year)
                 carried_over_value=self.getTotalCurrentYearValue(year-1)*(1+(self.growth_rate/100))
-                self.asset_year_end_values[self.current_year]=assetValue+carried_over_value
+                self.asset_year_end_values[year]=assetValue+carried_over_value
             else:
-                self.asset_year_end_values[self.current_year]= self.getTotalCurrentYearValue(year-1)*(1+(self.growth_rate/100))
-        return self.asset_year_end_values.get(self.current_year)
-    
-    def getNetCurrentYearValue(self,year=current_year):
-        return self.getTxTypeInt()*self.getTotalCurrentYearValue(year)
+                self.asset_year_end_values[year] = self.getTotalCurrentYearValue(year-1)*(1+(self.growth_rate/100))
+        return self.asset_year_end_values.get(year)
     
     def getTxTypeInt(self):
         if(self.txtype==TxType.CREDIT.value):
