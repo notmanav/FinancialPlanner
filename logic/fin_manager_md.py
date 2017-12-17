@@ -7,13 +7,13 @@ class asset_manager(object):
     default_end_year=2020
     read_manager =None
     assets_by_liquidity=None
-    
+            
     def __init__(self):
         self.read_manager=ReadManager()
         self.assets_by_liquidity=list()
     
         
-    def print_asset_details(self,assetitem, current_year, verbose):
+    def print_year_end_summary(self, current_year, verbose):
         if (verbose):
             print('********Beginning of the year: %d *********' % current_year)
         for assetitem in self.read_manager.getassetdata():
@@ -35,7 +35,6 @@ class asset_manager(object):
                     assetitem.mark_end_of_year(current_year)
             
             self.sort_by_liquidity()
-            self.print_asset_details(assetitem, current_year, True)
             
             for assetitem in self.read_manager.getassetdata():
                 if(assetitem.txtype==TxType.DEBIT.value):
@@ -48,7 +47,7 @@ class asset_manager(object):
                             self.sort_by_liquidity()
             
             #Year End printing
-            self.print_asset_details(assetitem, current_year, verbose)
+            self.print_year_end_summary(current_year, verbose)
             current_year=current_year+1
             
     def sort_by_liquidity(self):

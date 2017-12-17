@@ -5,6 +5,8 @@ from sqlalchemy.sql.expression import text
 from datetime import date
 from enum import Enum
 from db.db_manager_md import create_my_engine
+from forex_python.converter import CurrencyRates
+
 
 class Currency(Enum):
     USD='USD'
@@ -65,6 +67,8 @@ class Asset(Base):
     current_year=0
     asset_year_end_values=None
     sort_order=0
+    currency_rate=CurrencyRates()
+    currency_cache=dict()
     
         
     @orm.reconstructor
@@ -84,6 +88,14 @@ class Asset(Base):
             if(verbose==True or current_year_value!=0):
                 print("%d || %s || %d || %s || %s" %(year, self.name,current_year_value, self.acquire_date, self.getEndDate()))
     
+    def convertCurrencies(self,from_currency, to_currency='USD'):
+        if(from_currency==to_currency):
+            return 1
+        if(self.currency_cache.get(from_currency+"->"+to_currency)==None):
+            self.currency_cache[from_currency+"->"+to_currency]= self.currency_rate.get_rate(from_currency,to_currency)
+        return self.currency_cache.get(from_currency+"->"+to_currency)
+    
+    
     def getEndDate(self):
         try:
             return self.acquire_date.replace(year = self.acquire_date.year + self.recurrence)
@@ -95,28 +107,32 @@ class Asset(Base):
 
     #Reduce amount logic here
     def reduceValue(self, expense, year):
-        if(self.getTotalCurrentYearValue(year)>=expense.getTotalCurrentYearValue(year)):
-            self.setTotalCurrentYearValue(self.getTotalCurrentYearValue(year)-expense.getTotalCurrentYearValue(year), year)
+        reduce_amount=expense.getTotalCurrentYearValue(year)
+        reduce_amount_in_currency=reduce_amount*self.convertCurrencies(expense.amount_currency,self.amount_currency)
+        if(self.getTotalCurrentYearValue(year)>=reduce_amount_in_currency):
+            self.setTotalCurrentYearValue(self.getTotalCurrentYearValue(year)-reduce_amount_in_currency, year)
             expense.setTotalCurrentYearValue(0,year)
             return 0
         else:
-            remaining_money= expense.getTotalCurrentYearValue()-self.getTotalCurrentYearValue(year)
+            remaining_money= reduce_amount_in_currency-self.getTotalCurrentYearValue(year)
             self.setTotalCurrentYearValue(0,year)
-            expense.setTotalCurrentYearValue(remaining_money,year)
+            expense.setTotalCurrentYearValue(remaining_money*self.convertCurrencies(self.amount_currency, expense.amount_currency),year)
             return remaining_money
     
     def yearsSince(self, year):
-        return self.acquire_date.year-year
+        return year-self.acquire_date.year
         
     def setTotalCurrentYearValue(self, amount, year=current_year):
         self.asset_year_end_values[year]=amount
         
     def getTotalCurrentYearValue(self, year=current_year):
+        if(self.name=="Salary"):
+            self.name="Salary"
         if(self.acquire_date.year>year):
             return 0
         elif(self.asset_year_end_values.get(year)==None):
             if(self.isActive(year)):
-                assetValue=self.amount*(1+self.growth_rate/100)**self.yearsSince(year)
+                assetValue=self.amount*((1+self.growth_rate/100)**self.yearsSince(year))
                 carried_over_value=self.getTotalCurrentYearValue(year-1)*(1+(self.growth_rate/100))
                 self.asset_year_end_values[year]=assetValue+carried_over_value
             else:
@@ -133,10 +149,10 @@ class Asset(Base):
     
     def mark_start_of_year(self,year):
         self.current_year=year
-        self.asset_year_end_values[year]=self.getTotalCurrentYearValue(year)
     
     def mark_end_of_year(self,year):
         self.current_year=year
+        self.asset_year_end_values[year]=self.getTotalCurrentYearValue(year)
 
 engine = create_my_engine()
  
