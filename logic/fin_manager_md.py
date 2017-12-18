@@ -54,4 +54,8 @@ class asset_manager(object):
         self.assets_by_liquidity.sort(key=lambda x: x.liquidity*1000000000+x.amount, reverse=False)
         
     def getNextMostLiquidAsset(self):
-        return self.assets_by_liquidity[-1]
+        try:
+            return self.assets_by_liquidity[-1]
+        except:
+            print("You'll run out of money in year : %d" %self.begin_year)
+            return 
