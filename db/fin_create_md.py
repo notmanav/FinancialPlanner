@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer,Float, String, orm
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql.sqltypes import DateTime
 from sqlalchemy.sql.expression import text
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 from db.db_manager_md import create_my_engine
 from forex_python.converter import CurrencyRates
@@ -103,7 +103,7 @@ class Asset(Base):
             return self.acquire_date + (date(self.acquire_date.year + self.recurrence, 3, 1) - date(self.acquire_date.year, 3, 1))
         
     def isActive(self, year):
-        return self.acquire_date.year<= year and self.getEndDate().year>year
+        return self.acquire_date.year<= year and self.getEndDate()>date(year,1,1)
 
     #Reduce amount logic here
     def reduceValue(self, expense, year):
@@ -118,12 +118,23 @@ class Asset(Base):
             self.setTotalCurrentYearValue(0,year)
             expense.setTotalCurrentYearValue(remaining_money*self.convertCurrencies(self.amount_currency, expense.amount_currency),year)
             return remaining_money
-    
-    def yearsSince(self, year):
-        return year-self.acquire_date.year
         
     def setTotalCurrentYearValue(self, amount, year=current_year):
         self.asset_year_end_values[year]=amount
+        
+    def yearsSince(self, year):
+        return divmod((datetime(year,12,31)-(self.acquire_date)).total_seconds()+1*24*60*60,60)[0]/(60*24*365)
+    
+    def termsInAYear(self):
+        if(self.frequency==Frequency.DAILY.value):
+            return 365
+        elif(self.frequency==Frequency.WEEKLY.value):
+            return 52
+        elif(self.frequency==Frequency.MONTHLY.value):
+            return 12
+        else:
+            return 1
+        
         
     def getTotalCurrentYearValue(self, year=current_year):
         if(self.name=="Salary"):
@@ -132,11 +143,11 @@ class Asset(Base):
             return 0
         elif(self.asset_year_end_values.get(year)==None):
             if(self.isActive(year)):
-                assetValue=self.amount*((1+self.growth_rate/100)**self.yearsSince(year))
-                carried_over_value=self.getTotalCurrentYearValue(year-1)*(1+(self.growth_rate/100))
+                assetValue=(self.amount*self.termsInAYear())*((1+((self.growth_rate*self.termsInAYear())/100))**(self.yearsSince(year)))
+                carried_over_value=self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInAYear())
                 self.asset_year_end_values[year]=assetValue+carried_over_value
             else:
-                self.asset_year_end_values[year] = self.getTotalCurrentYearValue(year-1)*(1+(self.growth_rate/100))
+                self.asset_year_end_values[year] = self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInAYear())
         return self.asset_year_end_values.get(year)
     
     def getTxTypeInt(self):
