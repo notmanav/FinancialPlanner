@@ -7,6 +7,7 @@ from enum import Enum
 from db.db_manager_md import create_my_engine
 from dateutil.relativedelta import relativedelta
 from forex_python.converter import CurrencyRates 
+import locale
 
 
 class Currency(Enum):
@@ -79,6 +80,19 @@ class Asset(Base):
         self.carry_over_value=0
         self.current_year=0
 
+    def format_current_year_value(self,year=current_year):
+        amount=self.getTotalCurrentYearValue(year)
+        if self.amount_currency == Currency.INR.value:
+            locale.setlocale(locale.LC_ALL,'hi_IN.ISCII-DEV') #needs fixing and more generic support. Also, not sure why en_IN is not present
+            return locale.currency(amount,grouping=True)
+            #return '{:,.0f}'.format(amount)
+        elif self.amount_currency==Currency.EUR.value:
+            locale.setlocale(locale.LC_ALL,'en_IE') #needs fixing and more generic support.Just added for Ireland for now
+            return locale.currency(amount,grouping=True) 
+        else:
+            locale.setlocale(locale.LC_ALL, 'en_US' )
+            return locale.currency(amount,grouping=True)
+    
     def printMe(self):
             print("Original Value of the Asset is: %d" %self.amount)
             print("Original acquisition date of the asset is: %s" %self.acquire_date)
@@ -87,7 +101,7 @@ class Asset(Base):
     def printMeMini(self, year, verbose=False):
             current_year_value=self.getTxTypeInt()*self.getTotalCurrentYearValue(year)
             if(verbose==True or current_year_value!=0):
-                print("%d || %s || %d || %s || %s" %(year, self.name,current_year_value, self.acquire_date, self.getEndDate()))
+                print("%d || %s || %s %s || %s || %s" %(year, self.name,self.format_current_year_value(year),self.amount_currency, self.acquire_date, self.getEndDate()))
     
     def convertCurrencies(self,from_currency, to_currency='USD'):
         if(from_currency==to_currency):
