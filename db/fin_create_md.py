@@ -50,7 +50,7 @@ class Asset(Base):
     id = Column(Integer, primary_key=True)
     name=Column(String(100), nullable=False)
     description=Column(String(1000))
-    amount=Column(Integer, nullable=False)
+    amount  =Column(Integer, nullable=False)
     amount_currency=Column(String(10), nullable=False, server_default=Currency.USD.value)
     txtype=Column(String(10), nullable=False, server_default=TxType.DEBIT.value)
     acquire_date=Column(DateTime)
@@ -131,7 +131,7 @@ class Asset(Base):
     def yearsSince(self, year):
         return divmod((datetime(year,12,31)-(self.acquire_date)).total_seconds()+1*24*60*60,60)[0]/(60*24*365)
     
-    def termsInAYear(self,year=current_year):
+    def termsInActiveYear(self,year=current_year):
         acquire_dt=datetime.date(self.acquire_date)
         if(acquire_dt<=date(year,12,31)):
             start_date=max(date(year,1,1),acquire_dt)
@@ -144,13 +144,24 @@ class Asset(Base):
         r = relativedelta(end_date, start_date)
         
         if(self.frequency==Frequency.DAILY.value):
-            return r.days
+            return r.years*365+r.months*30+r.weeks*7+r.days
         elif(self.frequency==Frequency.WEEKLY.value):
-            return r.weeks
+            return r.years*52+r.months*4+r.weeks+r.days/7
         elif(self.frequency==Frequency.MONTHLY.value):
-            return r.months
+            return r.years*12+r.months+r.weeks/4+r.days/30
         else:
-            return r.years
+            return r.years+r.months/12+r.weeks/52+r.days/365
+        
+        
+    def termsInInFullYear(self,year=current_year):
+        if(self.frequency==Frequency.DAILY.value):
+            return 365
+        elif(self.frequency==Frequency.WEEKLY.value):
+            return 52
+        elif(self.frequency==Frequency.MONTHLY.value):
+            return 12
+        else:
+            return 1
         
         
     def getTotalCurrentYearValue(self, year=current_year):
@@ -158,11 +169,12 @@ class Asset(Base):
             return 0
         elif(self.asset_year_end_values.get(year)==None):
             if(self.isActive(year)):
-                assetValue=(self.amount*self.termsInAYear(year))*((1+((self.growth_rate*self.termsInAYear(year))/100))**(self.yearsSince(year)))
-                carried_over_value=self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInAYear(year))
+                #Value of an asset/expense at the end of the partial year is questionable. Assumes partial year amount but full year interest as the reconciliation happens only at the year end. A daily reconciliation may produce more accurate results
+                assetValue=(self.amount*self.termsInActiveYear(year))*((1+((self.growth_rate*self.termsInInFullYear(year))/100))**(self.yearsSince(year)))
+                carried_over_value=self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInInFullYear(year))
                 self.asset_year_end_values[year]=assetValue+carried_over_value
             else:
-                self.asset_year_end_values[year] = self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInAYear(year))
+                self.asset_year_end_values[year] = self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInInFullYear(year))
         return self.asset_year_end_values.get(year)
     
     def getTxTypeInt(self):
