@@ -154,8 +154,6 @@ class Asset(Base):
         
         
     def getTotalCurrentYearValue(self, year=current_year):
-        if(self.name=="Salary"):
-            self.name="Salary"
         if(self.acquire_date.year>year):
             return 0
         elif(self.asset_year_end_values.get(year)==None):
