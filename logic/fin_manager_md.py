@@ -41,7 +41,8 @@ class asset_manager(object):
                     assetitem.mark_start_of_year(current_year)
                     remainder=-1
                     while(remainder!=0):
-                        remainder=self.getNextMostLiquidAsset().reduceValue(assetitem,current_year)
+                        nextasset =self.getNextMostLiquidAsset()
+                        remainder=nextasset.reduceValue(assetitem,current_year)
                         if(remainder!=0):
                             self.assets_by_liquidity.pop()
                             self.sort_by_liquidity()

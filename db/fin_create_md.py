@@ -5,7 +5,8 @@ from sqlalchemy.sql.expression import text
 from datetime import date, datetime
 from enum import Enum
 from db.db_manager_md import create_my_engine
-from forex_python.converter import CurrencyRates
+from dateutil.relativedelta import relativedelta
+from forex_python.converter import CurrencyRates 
 
 
 class Currency(Enum):
@@ -95,12 +96,17 @@ class Asset(Base):
             self.currency_cache[from_currency+"->"+to_currency]= self.currency_rate.get_rate(from_currency,to_currency)
         return self.currency_cache.get(from_currency+"->"+to_currency)
     
-    
-    def getEndDate(self):
-        try:
-            return self.acquire_date.replace(year = self.acquire_date.year + self.recurrence)
-        except ValueError:
-            return self.acquire_date + (date(self.acquire_date.year + self.recurrence, 3, 1) - date(self.acquire_date.year, 3, 1))
+        
+    def getEndDate(self):       
+        date_1 = datetime.date(self.acquire_date)
+        if(self.frequency==Frequency.ANNUAL.value):
+            return date_1 + relativedelta(years=self.recurrence)
+        elif(self.frequency==Frequency.MONTHLY.value):
+            return date_1 + relativedelta(months=self.recurrence)
+        elif(self.frequency==Frequency.WEEKLY.value):
+            return date_1 + relativedelta(days=self.recurrence*7)
+        elif(self.frequency==Frequency.DAILY.value):
+            return date_1 + relativedelta(days=self.recurrence)
         
     def isActive(self, year):
         return self.acquire_date.year<= year and self.getEndDate()>date(year,1,1)
@@ -125,15 +131,26 @@ class Asset(Base):
     def yearsSince(self, year):
         return divmod((datetime(year,12,31)-(self.acquire_date)).total_seconds()+1*24*60*60,60)[0]/(60*24*365)
     
-    def termsInAYear(self):
-        if(self.frequency==Frequency.DAILY.value):
-            return 365
-        elif(self.frequency==Frequency.WEEKLY.value):
-            return 52
-        elif(self.frequency==Frequency.MONTHLY.value):
-            return 12
+    def termsInAYear(self,year=current_year):
+        acquire_dt=datetime.date(self.acquire_date)
+        if(acquire_dt<=date(year,12,31)):
+            start_date=max(date(year,1,1),acquire_dt)
         else:
-            return 1
+            return 0
+        if(self.getEndDate()>=date(year,1,1)):
+            end_date=min(self.getEndDate(),date(year+1,1,1))
+        else:
+            return 0
+        r = relativedelta(end_date, start_date)
+        
+        if(self.frequency==Frequency.DAILY.value):
+            return r.days
+        elif(self.frequency==Frequency.WEEKLY.value):
+            return r.weeks
+        elif(self.frequency==Frequency.MONTHLY.value):
+            return r.months
+        else:
+            return r.years
         
         
     def getTotalCurrentYearValue(self, year=current_year):
@@ -143,11 +160,11 @@ class Asset(Base):
             return 0
         elif(self.asset_year_end_values.get(year)==None):
             if(self.isActive(year)):
-                assetValue=(self.amount*self.termsInAYear())*((1+((self.growth_rate*self.termsInAYear())/100))**(self.yearsSince(year)))
-                carried_over_value=self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInAYear())
+                assetValue=(self.amount*self.termsInAYear(year))*((1+((self.growth_rate*self.termsInAYear(year))/100))**(self.yearsSince(year)))
+                carried_over_value=self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInAYear(year))
                 self.asset_year_end_values[year]=assetValue+carried_over_value
             else:
-                self.asset_year_end_values[year] = self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInAYear())
+                self.asset_year_end_values[year] = self.getTotalCurrentYearValue(year-1)*((1+(self.growth_rate/100))**self.termsInAYear(year))
         return self.asset_year_end_values.get(year)
     
     def getTxTypeInt(self):
